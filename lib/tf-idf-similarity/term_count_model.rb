@@ -1,3 +1,5 @@
+require 'parallel'
+require 'byebug'
 # A simple document-term matrix.
 module TfIdfSimilarity
   class TermCountModel
@@ -15,17 +17,44 @@ module TfIdfSimilarity
     # @option opts [Symbol] :library :gsl, :narray, :nmatrix or :matrix (default)
     def initialize(documents, opts = {})
       @documents = documents
+      #printf 'Initializing terms... '
+      a = Time.now
       @terms = Set.new(documents.map(&:terms).flatten).to_a
-      @library = (opts[:library] || :matrix).to_sym
+      #printf("Done! (#{Time.now - a})\n")
 
-      array = Array.new(terms.size) do |i|
-        Array.new(documents.size) do |j|
-          documents[j].term_count(terms[i])
-        end
+      #printf 'Getting library option... '
+      a = Time.now
+      @library = (opts[:library] || :matrix).to_sym
+      #printf("Done! (#{Time.now - a})\n")
+
+      parallel_params = {}
+      if documents.length > 100
+        a = Time.now
+        parallel_params[:progress] = 'Initializing big array of term frequency...'
       end
 
-      @matrix = initialize_matrix(array)
+      array = Array.new(terms.length, Array.new(documents.length))
+      array = Parallel.map_with_index(
+        array, parallel_params
+      ) do |docs_freq, index|
+        docs_freq.length.times do |j|
+          docs_freq[j] = documents[j].term_count(terms[index])
+        end
+        docs_freq
+      end
 
+      # #printf "Initializing big hash as alternative for term count... "
+      # counts = {}
+      # a = Time.now
+      # documents.each do |doc|
+      #   counts[doc.id] = {}
+      #   doc.terms.each do |term|
+      #     counts[doc.id][term] = doc.term_count(term)
+      #   end
+      # end
+      # #printf("Done! (#{Time.now - a})\n")
+
+      @matrix = initialize_matrix(array)
       @average_document_size = documents.empty? ? 0 : sum / column_size.to_f
     end
 

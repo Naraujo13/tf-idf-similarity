@@ -1,3 +1,5 @@
+require 'parallel'
+
 module TfIdfSimilarity
   class Model
     include MatrixMethods
@@ -9,14 +11,32 @@ module TfIdfSimilarity
     # @param [Hash] opts optional arguments
     # @option opts [Symbol] :library :gsl, :narray, :nmatrix or :matrix (default)
     def initialize(documents, opts = {})
+
+      #puts '-- METHOD START --'
+      #puts '-- Model.Initialize'
+
+      #printf 'Initializing term count model... '
+      a = Time.now
       @model = TermCountModel.new(documents, opts)
+      #printf("Done! (#{Time.now - a})\n")
+
       @library = (opts[:library] || :matrix).to_sym
 
-      array = Array.new(terms.size) do |i|
-        idf = inverse_document_frequency(terms[i])
-        Array.new(documents.size) do |j|
-          term_frequency(documents[j], terms[i]) * idf
+      parallel_params = {}
+      if documents.length > 100
+        a = Time.now
+        parallel_params[:progress] = 'Initializing big array of tfidf scores... '
+      end
+
+      array = Array.new(terms.length, Array.new(documents.length))
+      array = Parallel.map_with_index(
+        array, parallel_params
+      ) do |docs_freq, index|
+        idf = inverse_document_frequency(terms[index])
+        docs_freq.length.times do |j|
+          docs_freq[j] = term_frequency(documents[j], terms[index]) * idf
         end
+        docs_freq
       end
 
       @matrix = initialize_matrix(array)
