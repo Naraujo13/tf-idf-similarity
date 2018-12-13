@@ -1,5 +1,8 @@
 require 'parallel'
 require 'byebug'
+require 'numo/narray'
+
+
 # A simple document-term matrix.
 module TfIdfSimilarity
   class TermCountModel
@@ -17,45 +20,28 @@ module TfIdfSimilarity
     # @option opts [Symbol] :library :gsl, :narray, :nmatrix or :matrix (default)
     def initialize(documents, opts = {})
       @documents = documents
-      #printf 'Initializing terms... '
-      a = Time.now
+
       @terms = Set.new(documents.map(&:terms).flatten).to_a
-      #printf("Done! (#{Time.now - a})\n")
 
-      #printf 'Getting library option... '
-      a = Time.now
       @library = (opts[:library] || :matrix).to_sym
-      #printf("Done! (#{Time.now - a})\n")
 
-      parallel_params = {}
+      parallel_params = {in_threads: 16}
       if documents.length > 100
         a = Time.now
         parallel_params[:progress] = 'Initializing big array of term frequency...'
       end
 
-      array = Array.new(terms.length, Array.new(documents.length))
-      array = Parallel.map_with_index(
-        array, parallel_params
-      ) do |docs_freq, index|
-        docs_freq.length.times do |j|
-          docs_freq[j] = documents[j].term_count(terms[index])
+      # Allocate zeroed matrix
+      @matrix = Numo::UInt16.zeros(terms.length, documents.length)
+
+      # Parallel iteration to fill the term frequencies
+      Parallel.each_with_index(terms, parallel_params) do |_, term_index|
+        documents.length.times do |doc_index|
+          @matrix[term_index, doc_index] = documents[doc_index].term_count(terms[term_index])
         end
-        docs_freq
       end
 
-      # #printf "Initializing big hash as alternative for term count... "
-      # counts = {}
-      # a = Time.now
-      # documents.each do |doc|
-      #   counts[doc.id] = {}
-      #   doc.terms.each do |term|
-      #     counts[doc.id][term] = doc.term_count(term)
-      #   end
-      # end
-      # #printf("Done! (#{Time.now - a})\n")
-
-      @matrix = initialize_matrix(array)
-      @average_document_size = documents.empty? ? 0 : sum / column_size.to_f
+      @average_document_size = documents.empty? ? 0 : sum / documents.length.to_f
     end
 
     # @param [String] term a term
@@ -64,8 +50,8 @@ module TfIdfSimilarity
       index = terms.index(term)
       if index
         case @library
-        when :gsl, :narray
-          row(index).where.size
+        when :gsl, :narray, :numo_narray
+          row(index).to_a.count(&:nonzero?)
         when :nmatrix
           row(index).each.count(&:nonzero?)
         else
@@ -86,7 +72,7 @@ module TfIdfSimilarity
       index = terms.index(term)
       if index
         case @library
-        when :gsl, :narray
+        when :gsl, :narray, :numo_narray
           row(index).sum
         when :nmatrix
           row(index).each.reduce(0, :+) # NMatrix's `sum` method is slower

@@ -22,24 +22,24 @@ module TfIdfSimilarity
 
       @library = (opts[:library] || :matrix).to_sym
 
-      parallel_params = {}
+      parallel_params = {in_threads: 16}
       if documents.length > 100
         a = Time.now
         parallel_params[:progress] = 'Initializing big array of tfidf scores... '
       end
 
-      array = Array.new(terms.length, Array.new(documents.length))
-      array = Parallel.map_with_index(
-        array, parallel_params
-      ) do |docs_freq, index|
-        idf = inverse_document_frequency(terms[index])
-        docs_freq.length.times do |j|
-          docs_freq[j] = term_frequency(documents[j], terms[index]) * idf
-        end
-        docs_freq
-      end
+      # Allocate zeroed matrix
+      @matrix = Numo::UInt16.zeros(terms.length, documents.length)
 
-      @matrix = initialize_matrix(array)
+      # Parallel iteration to fill the term frequencies
+      Parallel.each_with_index(terms, parallel_params) do |_, term_index|
+        idf = inverse_document_frequency(terms[term_index])
+        documents.length.times do |doc_index|
+          @matrix[
+            term_index, doc_index
+          ] = term_frequency(documents[doc_index], terms[term_index]) * idf
+        end
+      end
     end
 
     # Return the term frequency–inverse document frequency.

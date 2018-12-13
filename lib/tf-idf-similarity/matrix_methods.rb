@@ -44,8 +44,8 @@ module TfIdfSimilarity
     # @param [Integer] column index
     def get(i, j)
       case @library
-      when :narray
-        @matrix[j, i]
+      when :narray, :numo_narray
+        @matrix[i, j]
       else
         @matrix[i, j]
       end
@@ -55,8 +55,8 @@ module TfIdfSimilarity
     # @return [GSL::Vector::View,NArray,NMatrix,Vector] a row
     def row(index)
       case @library
-      when :narray
-        @matrix[true, index]
+      when :narray, :numo_narray
+        @matrix[index, 0..-1]
       else
         @matrix.row(index)
       end
@@ -66,8 +66,8 @@ module TfIdfSimilarity
     # @return [GSL::Vector::View,NArray,NMatrix,Vector] a column
     def column(index)
       case @library
-      when :narray
-        @matrix[index, true]
+      when :narray, :numo_narray
+        @matrix[0..-1, index]
       else
         @matrix.column(index)
       end
@@ -78,8 +78,8 @@ module TfIdfSimilarity
       case @library
       when :gsl, :nmatrix
         @matrix.shape[0]
-      when :narray
-        @matrix.shape[1]
+      when :narray, :numo_narray
+        @matrix.shape[0]
       else
         @matrix.row_size
       end
@@ -90,8 +90,8 @@ module TfIdfSimilarity
       case @library
       when :gsl, :nmatrix
         @matrix.shape[1]
-      when :narray
-        @matrix.shape[0]
+      when :narray, :numo_narray
+        @matrix.shape[1]
       else
         @matrix.column_size
       end
@@ -110,7 +110,7 @@ module TfIdfSimilarity
     # @return [Float] the sum of all values in the matrix
     def sum
       case @library
-      when :narray
+      when :narray, :numo_narray
         @matrix.sum
       else
         values.reduce(0, :+)
@@ -124,7 +124,7 @@ module TfIdfSimilarity
       when :gsl
         GSL::Matrix[*array]
       when :narray
-        NArray[*array]
+        Numo::UInt16[array]
       when :nmatrix # @see https://github.com/SciRuby/nmatrix/issues/91#issuecomment-18870619
         NMatrix.new(:dense, [array.size, array.empty? ? 0 : array[0].size], array.flatten, :float64)
       else
@@ -147,7 +147,7 @@ module TfIdfSimilarity
       case @library
       when :gsl
         GSL::Sf::log(number)
-      when :narray
+      when :narray, :numo_narray
         NMath.log(number)
       else
         Math.log(number)
@@ -156,7 +156,7 @@ module TfIdfSimilarity
 
     def sqrt(number)
       case @library
-      when :narray
+      when :narray, :numo_narray
         NMath.sqrt(number)
       else
         Math.sqrt(number)
